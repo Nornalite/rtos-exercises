@@ -2,7 +2,7 @@
 	Viikkotehtävä 2, RTOS-ohjelmointi
 	Tavoiteltavaa pistemäärää en osaa sanoa, koska ajatus "tämä tehtävä ei vaatisi RTOS-taskeja
 	koska jatkuvaa suorittamisen tarvetta ei ole" vaivasi liikaa ja ryhdyin sooloilemaan.
-	5 pistettä kelpaisi mutten ihmettelisi vaikka poikkeaminen tehtävänannosta toisi vähemmän.
+	3 (tai mikä ikinä maksimimäärä onkaan) pistettä kelpaisi mutten ihmettelisi vaikka poikkeaminen tehtävänannosta toisi vähemmän.
 
 	Toteutuksessa siis käytössä kolme lediä ja neljä nappia;
 		- nappi 1 muuttaa tilan liikennevaloksi/ledistä toiseen siirtyväksi
