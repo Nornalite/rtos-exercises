@@ -1,3 +1,0 @@
-v1 - 10.9.-25
-    - Initial: Ex2, a few leds cycling or blinking based on
-      button-selected states
