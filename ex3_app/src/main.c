@@ -23,18 +23,22 @@ void button_2_handler(const struct device *dev, struct gpio_callback *cb, uint32
 void button_3_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins);
 
 // Game logic
-#define SCREEN_HEIGHT 32
-#define SCREEN_WIDTH 33
+#define FRAMERATE 10
+#define SCREEN_HEIGHT 20
+#define SCREEN_WIDTH 40
+#define CONTROL_CHARACTER_NO 3
 #define BAR_HEIGHT 3
+#define GET_PIXEL(axis) (((axis) + 5) / 10)
 typedef struct State {
 	uint8_t bar1;
 	uint8_t bar2;
-	uint8_t x_pixel;
-	uint8_t y_pixel;
-	uint16_t x_precise;
-	uint16_t y_precise;
-	uint16_t speed;
+	uint16_t x_position;
+	uint16_t y_position;
+	int16_t x_momentum;
+	int16_t y_momentum;
+	uint16_t velocity;
 } StateData;
+bool check_if_collided(StateData stateData);
 StateData calculate_positions(StateData stateData);
 void draw_row(uint8_t *buffer, StateData stateData, uint16_t rowNo);
 
@@ -143,8 +147,11 @@ void button_3_handler(const struct device *dev, struct gpio_callback *cb, uint32
 
 }
 
+
+/* Game logic */
+
 void frame_task(void *, void *, void *) {
-	StateData stateData = {5, 5, 5, 5, 5, 5, 5};
+	StateData stateData = {2, 7, 5, 100, 100, 10, 10};
 
 	//
 	while (true) {
@@ -161,32 +168,54 @@ void frame_task(void *, void *, void *) {
 		k_fifo_put(&data_fifo, buffer);
 
 		// Draw a frame once every (?) ms
-		k_msleep(500);
+		k_msleep(1000 / FRAMERATE);
 	}
 }
 
 StateData calculate_positions(StateData state) {
 	StateData newState = state;
 
-	newState.bar1 = (state.bar1 == (SCREEN_HEIGHT - (2 + BAR_HEIGHT))) ? 1 : ++state.bar1;
-	newState.bar2 = (state.bar2 == (SCREEN_HEIGHT - (2 + BAR_HEIGHT))) ? 1 : ++state.bar2;
-	newState.x_precise = (state.x_precise >= ((SCREEN_WIDTH - 2) * 100)) ? 200 : (state.x_precise + 100);
-	newState.y_precise = (state.y_precise >= ((SCREEN_HEIGHT - 1) * 100)) ? 200 : (state.y_precise + 100);
-	newState.x_pixel = newState.x_precise / 100;
-	newState.y_pixel = newState.y_precise / 100;
+	newState.bar1 = (state.bar1 == (SCREEN_HEIGHT - BAR_HEIGHT)) ? 1 : ++state.bar1;
+	newState.bar2 = (state.bar2 == (SCREEN_HEIGHT - BAR_HEIGHT)) ? 1 : ++state.bar2;
+
+	if (newState.x_position <= (1 * 10)) {
+		newState.x_momentum = 10;
+	} else if (newState.x_position >= ((SCREEN_WIDTH - 3) * 10)) {
+		newState.x_momentum = -10;
+
+	}
+	if (newState.y_position <= (1 * 10)) {
+		newState.y_momentum = 10;
+	} else if (newState.y_position >= ((SCREEN_HEIGHT - 1) * 10)) {
+		newState.y_momentum = -10;
+	}
+
+	newState.x_position += newState.x_momentum;
+	newState.y_position += newState.y_momentum;
 
 	return newState;
 }
+
+
+/* Tasks for drawing the frame out onto the screen */
 
 void uart_task(void *, void *, void *) {
 	FifoData *data = NULL;
 	int err = 0;
 	uint16_t rowsDrawn = 0;
-	uint8_t buffer[SCREEN_WIDTH] = {'.'};
+	uint8_t buffer[SCREEN_WIDTH + CONTROL_CHARACTER_NO] = {'.'};
 
 	printk("Start uart\r\n");
 
+	// Make cursor invisible
+	uint8_t control_sequence[10] = "\x1b[?25l";
+	uart_send(control_sequence, 6);
+
+	// Replace visibility altering control string with one that moves the cursor up
+	snprintf(control_sequence, 6, "\x1b[%uA", SCREEN_HEIGHT);
+
 	while (true) {
+		// Fetch frame from game logic
 		data = k_fifo_get(&data_fifo, K_FOREVER);
 
 		if (data == NULL) {
@@ -194,19 +223,14 @@ void uart_task(void *, void *, void *) {
 			continue;
 		}
 
-		// Fetch frame from game logic
 		while (rowsDrawn < SCREEN_HEIGHT) {
-			if (err == 0) {
-				// If there was no error with the previous row's transmission, convert frame into new row
-				draw_row(buffer, data->frame, rowsDrawn);
-				rowsDrawn++;
-			}
-
-			err = uart_tx(uart_device, buffer, SCREEN_WIDTH, 10000);
-
-			// Entering newline into the buffer doesn't work for [some reason], so this is currently necessary
-			printk("\n", rowsDrawn);
+			draw_row(buffer, data->frame, rowsDrawn);
+			rowsDrawn++;
+			uart_send(buffer, (SCREEN_WIDTH + CONTROL_CHARACTER_NO));
 		}
+
+		// Move the cursor to the top of the screen
+		uart_send(control_sequence, 5);
 
 		rowsDrawn = 0;
 		k_free(data);
@@ -214,27 +238,40 @@ void uart_task(void *, void *, void *) {
 	}
 }
 
+inline void uart_send(const uint8_t *data, uint8_t len) {
+	for (int i = 0; i < len; i++) {
+		uart_poll_out(uart_device, data[i]);
+	}
+}
+
 void draw_row(uint8_t *buffer, StateData stateData, uint16_t rowNo) {
-	// Upper and  bottom borders fill up the whole row
-	if (rowNo == 0 || rowNo == (SCREEN_HEIGHT - 1)) {
+	*(buffer + (SCREEN_WIDTH + 0)) = '\r';
+	*(buffer + (SCREEN_WIDTH + 1)) = '\n';
+
+	// Upper border fills up the entire row
+	if (rowNo == 0) {
 		for (int i = 0; i < SCREEN_WIDTH; i++) {
 			*(buffer + i) = '_';
 		}
 
-		*(buffer + (SCREEN_WIDTH - 1)) = '\n';
-
 		return;
 	}
 
-	// Flush out the buffer
-	for (int j = 0; j < SCREEN_WIDTH; j++) {
-		*(buffer + j) = ' ';
+
+	uint8_t fill = ' ';
+	// Lower border consists of _s, but those can be replaced by paddles or the ball, so no return
+	if (rowNo == (SCREEN_HEIGHT - 1)) {
+		fill = '_';
 	}
+
+	for (int j = 0; j < SCREEN_WIDTH; j++) {
+		*(buffer + j) = fill;
+	}
+
 
 	// The usual additions
 	*(buffer + 0) = '|';
-	*(buffer + (SCREEN_WIDTH - 2)) = '|';
-	*(buffer + (SCREEN_WIDTH - 1)) = ' ';
+	*(buffer + (SCREEN_WIDTH - 1)) = '|';
 
 	// Place the paddles
 	if (stateData.bar1 >= rowNo && stateData.bar1 < (rowNo + BAR_HEIGHT)) {
@@ -242,11 +279,11 @@ void draw_row(uint8_t *buffer, StateData stateData, uint16_t rowNo) {
 	}
 
 	if (stateData.bar2 >= rowNo && stateData.bar2 < (rowNo + BAR_HEIGHT)) {
-		*(buffer + (SCREEN_WIDTH - 3)) = 'H';
+		*(buffer + (SCREEN_WIDTH - 2)) = 'H';
 	}
 
 	// Draw the ball
-	if (stateData.y_pixel == rowNo) {
-		*(buffer + stateData.x_pixel) = 'O';
+	if (GET_PIXEL(stateData.y_position) == rowNo) {
+		*(buffer + GET_PIXEL(stateData.x_position)) = 'O';
 	}
 }
