@@ -6,6 +6,8 @@ A series of exercises focusing on RTOS and incremental development methods. Each
 
 ### v2 (ex3) - Refactor, data transfer
 
+14.9. Changed UART from async to polling, refined screen draw for a more fluid viewing experience, added basic movement to elements.
+
 11.9. Doing slight refactor of code. Currently prints screen to terminal, has paddles and ball moving in set pattern. Somehow managed to soft-brick the nRF5340DK, switching to a 7002 until issue is resolved (requires removal of two button interrupts as the 7002 only has 2 buttons instead of 4).
 
 ### v1 (ex2) - Light cycles through scheduling

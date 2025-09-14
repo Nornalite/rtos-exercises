@@ -151,7 +151,7 @@ void button_3_handler(const struct device *dev, struct gpio_callback *cb, uint32
 /* Game logic */
 
 void frame_task(void *, void *, void *) {
-	StateData stateData = {2, 7, 5, 100, 100, 10, 10};
+	StateData stateData = {1, 7, 5, 100, 100, 10, 10};
 
 	//
 	while (true) {
@@ -257,7 +257,6 @@ void draw_row(uint8_t *buffer, StateData stateData, uint16_t rowNo) {
 		return;
 	}
 
-
 	uint8_t fill = ' ';
 	// Lower border consists of _s, but those can be replaced by paddles or the ball, so no return
 	if (rowNo == (SCREEN_HEIGHT - 1)) {
@@ -268,17 +267,16 @@ void draw_row(uint8_t *buffer, StateData stateData, uint16_t rowNo) {
 		*(buffer + j) = fill;
 	}
 
-
 	// The usual additions
 	*(buffer + 0) = '|';
 	*(buffer + (SCREEN_WIDTH - 1)) = '|';
 
 	// Place the paddles
-	if (stateData.bar1 >= rowNo && stateData.bar1 < (rowNo + BAR_HEIGHT)) {
+	if ((stateData.bar1 + BAR_HEIGHT) > rowNo && (stateData.bar1 <= rowNo)) {
 		*(buffer + 1) = 'H';
 	}
 
-	if (stateData.bar2 >= rowNo && stateData.bar2 < (rowNo + BAR_HEIGHT)) {
+	if ((stateData.bar2 + BAR_HEIGHT) > rowNo && (stateData.bar2 <= rowNo)) {
 		*(buffer + (SCREEN_WIDTH - 2)) = 'H';
 	}
 
